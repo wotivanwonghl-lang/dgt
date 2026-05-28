@@ -1,23 +1,81 @@
-<div style="width: 100%; overflow: hidden; -webkit-overflow-scrolling: touch;">
-  <iframe 
-    src="https://wotivanwonghl-lang.github.io/dgt/" 
-    id="wingon-iframe"
-    style="width: 100%; border: none; display: block; height: 950px;"
-    scrolling="no"
-    onload="window.parent.scrollTo(0,0)"
-  ></iframe>
-</div>
+<script>
+    const config = {
+        base: "1QODgu_pJNaboAKHKMbr885-5imUaD0x5IMQJZFTKFtQ",
+        routes: {
+            "default": "2057090570",
+            "europe": "843863050",
+            "shanghai": "1793658173",
+            "beijing": "45122990",
+            "kunming": "1575858526",
+            "chengdu": "642101484",
+            "xian": "143561897",
+            "xiamen": "1775495153",
+            "guilin": "1148082754",
+            "harbin": "1827853662",
+            "urumqi": "75632460",
+            "zhangjiajie": "284210472"
+        }
+    };
 
-<style>
-/* 針對手機版 App 或網頁進行高度微調 */
-@media screen and (max-width: 639px) {
-  #wingon-iframe {
-    height: 880px !important; /* 調整至剛好看到 3 行商品 */
-  }
-}
-@media screen and (min-width: 640px) {
-  #wingon-iframe {
-    height: 700px !important; /* 電腦版顯示 2 行的高度 */
-  }
-}
-</style>
+    async function loadData() {
+        // 取得網址參數 ?dest=xxx
+        const urlParams = new URLSearchParams(window.location.search);
+        let dest = urlParams.get('dest');
+        
+        // 檢查參數是否存在，若無或不匹配則用 default
+        if (!dest || !config.routes[dest.toLowerCase()]) {
+            dest = "default";
+        } else {
+            dest = dest.toLowerCase();
+        }
+
+        const gid = config.routes[dest];
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${config.base}/export?format=csv&gid=${gid}`;
+        
+        console.log("正在載入目的地:", dest, "GID:", gid);
+
+        try {
+            const resp = await fetch(csvUrl);
+            if (!resp.ok) throw new Error('Network response was not ok');
+            const csvText = await resp.text();
+            render(csvText);
+        } catch (e) {
+            console.error("載入出錯:", e);
+            document.getElementById('grid').innerHTML = '<div class="msg">載入失敗，請檢查網路或參數設定</div>';
+        }
+    }
+
+    function render(csv) {
+        const rows = csv.split('\n').slice(1);
+        let cards = '';
+        const items = rows.slice(0, 16); 
+
+        items.forEach(row => {
+            const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+            if (cols.length < 5 || !cols[1]) return;
+
+            const title = cols[1].replace(/"/g, '').trim();
+            const price = cols[2].replace(/"/g, '').trim() || '--';
+            const loc = cols[4] ? cols[4].replace(/"/g, '').trim() : '精選';
+            const img = cols[12] ? cols[12].replace(/"/g, '').trim() : 'https://via.placeholder.com/300x200';
+            const link = cols[14] ? cols[14].replace(/"/g, '').trim() : '#';
+
+            cards += `
+                <a href="${link}" class="card" target="_blank">
+                    <div class="img-box">
+                        <div class="dest-tag">📍 ${loc}</div>
+                        <img src="${img}" alt="trip">
+                    </div>
+                    <div class="info">
+                        <h3 class="t-title">${title}</h3>
+                        <div class="price">HK$${price}<small>起</small></div>
+                    </div>
+                </a>`;
+        });
+
+        const container = document.getElementById('grid');
+        container.classList.remove('loading');
+        container.innerHTML = cards || '<div class="msg">此分頁暫無資料</div>';
+    }
+    loadData();
+</script>
