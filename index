@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>永安旅遊 - 精選行程</title>
+    <style>
+        body { margin: 0; padding: 0; font-family: "PingFang HK", "Helvetica Neue", Arial, sans-serif; background-color: #f4f7f9; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        .card { background: #fff; border-radius: 12px; border: 1px solid #eee; overflow: hidden; text-decoration: none; color: #333; transition: 0.3s; display: flex; flex-direction: column; height: 340px; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        .img-box { width: 100%; height: 180px; position: relative; background: #eee; }
+        .img-box img { width: 100%; height: 100%; object-fit: cover; }
+        .dest-tag { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #fff; font-size: 12px; padding: 4px 10px; border-radius: 4px; }
+        .info { padding: 15px; }
+        .t-title { font-size: 16px; font-weight: bold; height: 44px; margin: 0 0 10px 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; }
+        .price { color: #ff5722; font-size: 24px; font-weight: 800; }
+        .price small { font-size: 14px; color: #999; font-weight: normal; }
+        .loading { text-align: center; padding: 50px; font-size: 18px; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="grid" class="loading">行程載入中...</div>
+    </div>
+    <script>
+        // 1. 設定你的 Google Sheet CSV 映射表
+        const sheetConfig = {
+            base: "1QODgu_pJNaboAKHKMbr885-5imUaD0x5IMQJZFTKFtQ",
+            routes: {
+                "default": "2057090570",      // 日本 (預設)
+                "europe": "843863050",        // 歐洲
+                "shanghai": "1793658173",     // 上海
+                "beijing": "45122990",        // 北京
+                "kunming": "1575858526",      // 昆明
+                "chengdu": "642101484",       // 成都
+                "xian": "143561897",          // 西安
+                "xiamen": "1775495153",       // 廈門
+                "guilin": "1148082754",       // 桂林
+                "harbin": "1827853662",       // 哈爾濱
+                "urumqi": "75632460",         // 烏魯木齊
+                "zhangjiajie": "284210472"    // 張家界
+            }
+        };
+
+        async function fetchData() {
+            const params = new URLSearchParams(window.location.search);
+            const dest = params.get('dest') ? params.get('dest').toLowerCase().trim() : 'default';
+            const gid = sheetConfig.routes[dest] || sheetConfig.routes['default'];
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetConfig.base}/export?format=csv&gid=${gid}`;
+            
+            try {
+                const response = await fetch(csvUrl);
+                const text = await response.text();
+                renderCards(text);
+            } catch (error) {
+                document.getElementById('grid').innerHTML = "載入失敗，請檢查網路。";
+            }
+        }
+
+        function renderCards(csvData) {
+            const rows = csvData.split('\n').slice(1);
+            let html = '';
+
+            rows.forEach(row => {
+                // 簡易 CSV 解析（處理引號與逗號）
+                const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                if (cols.length < 5 || !cols[1]) return;
+                
+                const title = cols[1].replace(/"/g, '');
+                const price = cols[2].replace(/"/g, '') || '電洽';
+                const location = cols[4] ? cols[4].replace(/"/g, '') : '精選';
+                const img = cols[12] ? cols[12].replace(/"/g, '') : 'https://via.placeholder.com/300x200';
+                const link = cols[14] ? cols[14].replace(/"/g, '') : '#';
+
+                html += `
+                    <a href="${link}" class="card" target="_blank">
+                        <div class="img-box">
+                            <div class="dest-tag">📍 ${location}</div>
+                            <img src="${img}" alt="${title}">
+                        </div>
+                        <div class="info">
+                            <h3 class="t-title">${title}</h3>
+                            <div class="price">HK$ ${price} <small>起</small></div>
+                        </div>
+                    </a>`;
+            });
+
+            document.getElementById('grid').className = "";
+            document.getElementById('grid').innerHTML = html || "目前沒有行程。";
+        }
+
+        fetchData();
+    </script>
+</body>
+</html>
