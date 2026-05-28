@@ -1,4 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wing On Travel Widget</title>
+    <style>
+        /* 基礎樣式重置 */
+        * { box-sizing: border-box; }
+        body { 
+            margin: 0; padding: 0; 
+            font-family: "PingFang HK", "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif; 
+            background-color: transparent; 
+            overflow-x: hidden;
+        }
+        
+        /* 網格系統：手機預設 2 欄 */
+        #grid { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 10px; 
+            padding: 12px;
+        }
+
+        /* 卡片設計 */
+        .card { 
+            background: #fff; 
+            border-radius: 8px; 
+            border: 1px solid #eee; 
+            text-decoration: none; 
+            color: #333; 
+            display: flex; 
+            flex-direction: column; 
+            transition: 0.2s;
+            height: auto; 
+            padding-bottom: 12px;
+        }
+        
+        .card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+
+        /* 圖片容器 */
+        .img-box { width: 100%; height: 110px; position: relative; background: #f5f5f5; }
+        .img-box img { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* 目的地標籤 */
+        .dest-tag { 
+            position: absolute; top: 6px; left: 6px; 
+            background: rgba(0,0,0,0.7); color: #fff; 
+            font-size: 10px; padding: 2px 6px; border-radius: 3px; 
+            z-index: 2;
+        }
+
+        /* 文字資訊 */
+        .info { padding: 10px 10px 0 10px; }
+        
+        .t-title { 
+            font-size: 13px; 
+            font-weight: bold; 
+            line-height: 1.4; 
+            margin: 0; 
+            height: 36px; /* 固定兩行高度 */
+            overflow: hidden;
+            display: -webkit-box; 
+            -webkit-line-clamp: 2; 
+            -webkit-box-orient: vertical;
+            color: #222;
+        }
+
+        .price { 
+            color: #ff5722; 
+            font-size: 18px; 
+            font-weight: 800; 
+            margin-top: 4px; /* 緊貼標題，消除多餘空隙 */
+            line-height: 1.2;
+        }
+        .price small { font-size: 11px; color: #999; font-weight: normal; margin-left: 2px; }
+
+        /* 電腦版佈局優化 (螢幕寬度 640px 以上) */
+        @media (min-width: 640px) {
+            #grid { 
+                grid-template-columns: repeat(4, 1fr); /* 強制 4 欄並排 */
+                gap: 20px;
+                padding: 20px;
+            }
+            .img-box { height: 160px; }
+            .t-title { font-size: 15px; height: 42px; }
+            .price { font-size: 22px; }
+        }
+
+        /* 狀態提示 */
+        .loading, .msg { 
+            text-align: center; padding: 60px 20px; color: #888; 
+            grid-column: 1/-1; font-size: 15px; 
+        }
+    </style>
+</head>
+<body>
+
+    <div id="grid" class="loading">正在獲取最新行程...</div>
+
 <script>
+    // 1. 目的地與 GID 配置表
     const config = {
         base: "1QODgu_pJNaboAKHKMbr885-5imUaD0x5IMQJZFTKFtQ",
         routes: {
@@ -17,54 +118,55 @@
         }
     };
 
-    async function loadData() {
-        // 取得網址參數 ?dest=xxx
+    // 2. 獲取數據邏輯
+    async function init() {
         const urlParams = new URLSearchParams(window.location.search);
-        let dest = urlParams.get('dest');
+        let destKey = urlParams.get('dest');
         
-        // 檢查參數是否存在，若無或不匹配則用 default
-        if (!dest || !config.routes[dest.toLowerCase()]) {
-            dest = "default";
+        // 防呆：如果參數不存在或沒對應 GID，則使用 default
+        if (!destKey || !config.routes[destKey.toLowerCase()]) {
+            destKey = "default";
         } else {
-            dest = dest.toLowerCase();
+            destKey = destKey.toLowerCase();
         }
 
-        const gid = config.routes[dest];
+        const gid = config.routes[destKey];
         const csvUrl = `https://docs.google.com/spreadsheets/d/${config.base}/export?format=csv&gid=${gid}`;
-        
-        console.log("正在載入目的地:", dest, "GID:", gid);
 
         try {
-            const resp = await fetch(csvUrl);
-            if (!resp.ok) throw new Error('Network response was not ok');
-            const csvText = await resp.text();
-            render(csvText);
-        } catch (e) {
-            console.error("載入出錯:", e);
-            document.getElementById('grid').innerHTML = '<div class="msg">載入失敗，請檢查網路或參數設定</div>';
+            const response = await fetch(csvUrl);
+            if (!response.ok) throw new Error('Fetch failed');
+            const data = await response.text();
+            render(data);
+        } catch (err) {
+            document.getElementById('grid').innerHTML = '<div class="msg">行程加載失敗，請稍後再試</div>';
         }
     }
 
-    function render(csv) {
-        const rows = csv.split('\n').slice(1);
-        let cards = '';
-        const items = rows.slice(0, 16); 
+    // 3. 渲染卡片邏輯
+    function render(csvText) {
+        const rows = csvText.split('\n').slice(1);
+        let html = '';
+        
+        // 限制顯示前 16 個商品
+        const displayItems = rows.slice(0, 16);
 
-        items.forEach(row => {
+        displayItems.forEach(row => {
+            // 解析 CSV 欄位（考慮引號與逗號）
             const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
             if (cols.length < 5 || !cols[1]) return;
 
             const title = cols[1].replace(/"/g, '').trim();
             const price = cols[2].replace(/"/g, '').trim() || '--';
-            const loc = cols[4] ? cols[4].replace(/"/g, '').trim() : '精選';
-            const img = cols[12] ? cols[12].replace(/"/g, '').trim() : 'https://via.placeholder.com/300x200';
+            const location = cols[4] ? cols[4].replace(/"/g, '').trim() : '精選行程';
+            const imgUrl = cols[12] ? cols[12].replace(/"/g, '').trim() : 'https://via.placeholder.com/300x200?text=WingOn';
             const link = cols[14] ? cols[14].replace(/"/g, '').trim() : '#';
 
-            cards += `
+            html += `
                 <a href="${link}" class="card" target="_blank">
                     <div class="img-box">
-                        <div class="dest-tag">📍 ${loc}</div>
-                        <img src="${img}" alt="trip">
+                        <div class="dest-tag">📍 ${location}</div>
+                        <img src="${imgUrl}" alt="travel image" loading="lazy">
                     </div>
                     <div class="info">
                         <h3 class="t-title">${title}</h3>
@@ -73,9 +175,14 @@
                 </a>`;
         });
 
-        const container = document.getElementById('grid');
-        container.classList.remove('loading');
-        container.innerHTML = cards || '<div class="msg">此分頁暫無資料</div>';
+        const grid = document.getElementById('grid');
+        grid.classList.remove('loading');
+        grid.innerHTML = html || '<div class="msg">此區域暫無可用行程</div>';
     }
-    loadData();
+
+    // 啟動程序
+    init();
 </script>
+
+</body>
+</html>
